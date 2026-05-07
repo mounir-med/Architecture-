@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS articles_par_jour (
+  date DATE PRIMARY KEY,
+  nb_articles INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS articles_par_source (
+  source TEXT PRIMARY KEY,
+  nb_articles INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS mots_cles (
+  mot_cle TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS top_sujets (
+  sujet TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
