@@ -220,6 +220,43 @@ def _is_stopword(tok: str, lang: Optional[str]) -> bool:
     return tok in _STOPWORDS_FR or tok in _STOPWORDS_EN or tok in _STOPWORDS_AR
 
 
+def compute_articles_par_theme(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    counter: dict[str, int] = defaultdict(int)
+    for a in articles:
+        categorie = str(a.get("categorie") or "").strip()
+        theme = categorie if categorie else "unknown"
+        counter[theme] += 1
+    return [
+        {"theme": theme, "nb_articles": count}
+        for theme, count in sorted(counter.items(), key=lambda x: (-x[1], x[0]))
+    ]
+
+
+def compute_articles_par_pays(articles: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _country_from_source(source: str) -> str:
+        s = (source or "").strip().lower()
+        if s in {"hespress", "akhbarona", "barlamane", "goud"}:
+            return "Maroc"
+        if s == "aljazeera":
+            return "Qatar"
+        if s == "bbc_arabic":
+            return "UK"
+        if s == "reuters":
+            return "USA"
+        return "unknown"
+
+    counter: dict[str, int] = defaultdict(int)
+    for a in articles:
+        source = str(a.get("source") or "").strip()
+        pays = _country_from_source(source)
+        counter[pays] += 1
+
+    return [
+        {"pays": pays, "nb_articles": count}
+        for pays, count in sorted(counter.items(), key=lambda x: (-x[1], x[0]))
+    ]
+
+
 def aggregate_gold(
     s3,
     bucket: str,
@@ -240,6 +277,7 @@ def aggregate_gold(
 
     processed = 0
     rejected = 0
+    articles: list[dict[str, Any]] = []
 
     for key in keys:
         payload = get_json(s3, bucket=bucket, key=key)
@@ -269,6 +307,7 @@ def aggregate_gold(
             sujets_counter.update([f"{title_tokens[i]} {title_tokens[i+1]}"])
 
         processed += 1
+        articles.append(article)
 
     # Build gold payloads
     if gold_prefix:
@@ -299,6 +338,9 @@ def aggregate_gold(
         for w, c in sujets_counter.most_common(top_n_keywords)
     ]
 
+    articles_par_theme_rows = compute_articles_par_theme(articles)
+    articles_par_pays_rows = compute_articles_par_pays(articles)
+
     keys_written: list[str] = []
 
     k1 = f"{base_prefix}/articles_par_jour.json"
@@ -316,6 +358,14 @@ def aggregate_gold(
     k4 = f"{base_prefix}/top_sujets.json"
     put_json(s3, bucket=bucket, key=k4, payload={"generated_at": _now_utc_iso(), "rows": top_sujets_rows})
     keys_written.append(k4)
+
+    k5 = f"{base_prefix}/articles_par_theme.json"
+    put_json(s3, bucket=bucket, key=k5, payload={"generated_at": _now_utc_iso(), "rows": articles_par_theme_rows})
+    keys_written.append(k5)
+
+    k6 = f"{base_prefix}/articles_par_pays.json"
+    put_json(s3, bucket=bucket, key=k6, payload={"generated_at": _now_utc_iso(), "rows": articles_par_pays_rows})
+    keys_written.append(k6)
 
     manifest_key = f"gold/_manifests/silver_to_gold_{run_id}.json"
     put_json(

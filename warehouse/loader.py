@@ -75,6 +75,32 @@ def upsert_articles_par_jour(cur, rows: list[dict[str, Any]]) -> int:
     return n
 
 
+def upsert_articles_par_theme(cur, rows: list[dict[str, Any]]) -> int:
+    q = (
+        "INSERT INTO articles_par_theme(theme, nb_articles, updated_at) "
+        "VALUES (%s, %s, NOW()) "
+        "ON CONFLICT (theme) DO UPDATE SET nb_articles = EXCLUDED.nb_articles, updated_at = NOW()"
+    )
+    n = 0
+    for r in rows:
+        cur.execute(q, (r.get("theme"), int(r.get("nb_articles", 0))))
+        n += 1
+    return n
+
+
+def upsert_articles_par_pays(cur, rows: list[dict[str, Any]]) -> int:
+    q = (
+        "INSERT INTO articles_par_pays(pays, nb_articles, updated_at) "
+        "VALUES (%s, %s, NOW()) "
+        "ON CONFLICT (pays) DO UPDATE SET nb_articles = EXCLUDED.nb_articles, updated_at = NOW()"
+    )
+    n = 0
+    for r in rows:
+        cur.execute(q, (r.get("pays"), int(r.get("nb_articles", 0))))
+        n += 1
+    return n
+
+
 def upsert_articles_par_source(cur, rows: list[dict[str, Any]]) -> int:
     q = (
         "INSERT INTO articles_par_source(source, nb_articles, updated_at) "
@@ -133,6 +159,8 @@ def run_load(
         "articles_par_source": f"{gold_prefix}/articles_par_source.json",
         "mots_cles": f"{gold_prefix}/mots_cles.json",
         "top_sujets": f"{gold_prefix}/top_sujets.json",
+        "articles_par_theme": f"{gold_prefix}/articles_par_theme.json",
+        "articles_par_pays": f"{gold_prefix}/articles_par_pays.json",
     }
 
     datasets = {name: load_gold_dataset(s3, bucket=bucket, key=k) for name, k in keys.items()}
@@ -143,10 +171,21 @@ def run_load(
             n2 = upsert_articles_par_source(cur, datasets["articles_par_source"])
             n3 = upsert_mots_cles(cur, datasets["mots_cles"])
             n4 = upsert_top_sujets(cur, datasets["top_sujets"])
+            n5 = upsert_articles_par_theme(cur, datasets["articles_par_theme"])
+            n6 = upsert_articles_par_pays(cur, datasets["articles_par_pays"])
 
         conn.commit()
 
-    return {"loaded": {"articles_par_jour": n1, "articles_par_source": n2, "mots_cles": n3, "top_sujets": n4}}
+    return {
+        "loaded": {
+            "articles_par_jour": n1,
+            "articles_par_source": n2,
+            "mots_cles": n3,
+            "top_sujets": n4,
+            "articles_par_theme": n5,
+            "articles_par_pays": n6,
+        }
+    }
 
 
 def build_arg_parser() -> argparse.ArgumentParser:

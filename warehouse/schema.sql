@@ -21,3 +21,23 @@ CREATE TABLE IF NOT EXISTS top_sujets (
   count INTEGER NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS articles_par_theme (
+
+  theme TEXT PRIMARY KEY,
+
+  nb_articles INTEGER NOT NULL,
+
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+);
+
+CREATE TABLE IF NOT EXISTS articles_par_pays (
+
+  pays TEXT PRIMARY KEY,
+
+  nb_articles INTEGER NOT NULL,
+
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+
+);

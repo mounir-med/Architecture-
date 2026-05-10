@@ -1,9 +1,8 @@
 import argparse
 import json
 import re
-import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Iterable, Optional
 from urllib.parse import urljoin, urlparse
@@ -12,8 +11,8 @@ import requests
 from bs4 import BeautifulSoup
 
 
-SOURCE_NAME = "hespress"
-BASE_URL = "https://www.hespress.com/"
+SOURCE_NAME = "bbc_arabic"
+BASE_URL = "https://www.bbc.com/arabic"
 DEFAULT_TIMEOUT_SECONDS = 20
 
 
@@ -50,7 +49,7 @@ def _requests_session(user_agent: str) -> requests.Session:
         {
             "User-Agent": user_agent,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8,ar;q=0.7",
+            "Accept-Language": "ar,fr-FR;q=0.8,fr;q=0.7,en;q=0.6",
             "Connection": "keep-alive",
         }
     )
@@ -64,17 +63,11 @@ def fetch_html(session: requests.Session, url: str, timeout: int) -> str:
 
 
 def extract_article_urls_from_homepage(html: str, base_url: str) -> list[str]:
-    """Best-effort extraction of Hespress article URLs from a listing page.
-
-    Hespress markup can change; we therefore:
-    - collect all <a href> links
-    - keep links that look like article permalinks (contain a numeric id)
-    - deduplicate while preserving order
-    """
     soup = BeautifulSoup(html, "html.parser")
-
     urls: list[str] = []
     seen: set[str] = set()
+
+    base_host = urlparse(base_url).netloc
 
     for a in soup.select("a[href]"):
         href = a.get("href")
@@ -85,9 +78,13 @@ def extract_article_urls_from_homepage(html: str, base_url: str) -> list[str]:
         if not _is_valid_http_url(abs_url):
             continue
 
-        # Heuristic: many Hespress article URLs include a numeric id.
-        # Example pattern: .../123456.html or .../123456/
-        if not re.search(r"/\d{4,}(?:\.html)?/?$", abs_url):
+        if urlparse(abs_url).netloc != base_host:
+            continue
+
+        if re.search(r"/(?:live|programmes|topics|tag|tags|author|authors)/", abs_url, flags=re.IGNORECASE):
+            continue
+
+        if not re.search(r"-\d+$", abs_url) and not re.search(r"/\d{4}/\d{2}/\d{2}/", abs_url):
             continue
 
         if abs_url in seen:
@@ -96,27 +93,6 @@ def extract_article_urls_from_homepage(html: str, base_url: str) -> list[str]:
         urls.append(abs_url)
 
     return urls
-
-
-def _extract_text_from_article_body(soup: BeautifulSoup) -> str:
-    # Try common containers; fallback to all <p> in the page.
-    candidates = [
-        soup.select_one("article"),
-        soup.select_one(".post-content"),
-        soup.select_one(".entry-content"),
-        soup.select_one(".article-content"),
-    ]
-
-    for c in candidates:
-        if not c:
-            continue
-        ps = c.select("p")
-        text = _normalize_whitespace(" ".join(p.get_text(" ", strip=True) for p in ps))
-        if len(text) >= 50:
-            return text
-
-    ps = soup.select("p")
-    return _normalize_whitespace(" ".join(p.get_text(" ", strip=True) for p in ps))
 
 
 def _extract_title(soup: BeautifulSoup) -> str:
@@ -137,12 +113,11 @@ def _extract_title(soup: BeautifulSoup) -> str:
 
 
 def _extract_category(soup: BeautifulSoup) -> Optional[str]:
-    # Best effort: try breadcrumbs / category links
     for sel in [
         ".breadcrumb a",
         "nav.breadcrumb a",
+        ".breadcrumbs a",
         "a[rel='category tag']",
-        ".post-categories a",
     ]:
         a = soup.select_one(sel)
         if a:
@@ -150,7 +125,6 @@ def _extract_category(soup: BeautifulSoup) -> Optional[str]:
             if v:
                 return v
 
-    # Try meta
     section = soup.select_one('meta[property="article:section"]')
     if section and section.get("content"):
         return _normalize_whitespace(section["content"])
@@ -179,6 +153,7 @@ def _extract_author(soup: BeautifulSoup) -> Optional[str]:
         ".author",
         ".post-author",
         "a[rel='author']",
+        "[data-testid='byline-name']",
     ]:
         el = soup.select_one(sel)
         if el:
@@ -190,7 +165,6 @@ def _extract_author(soup: BeautifulSoup) -> Optional[str]:
 
 
 def _extract_published_date_iso(soup: BeautifulSoup) -> Optional[str]:
-    # Try common machine-readable timestamps
     time_tag = soup.select_one("time[datetime]")
     if time_tag and time_tag.get("datetime"):
         return _normalize_whitespace(time_tag["datetime"])
@@ -199,7 +173,6 @@ def _extract_published_date_iso(soup: BeautifulSoup) -> Optional[str]:
     if meta_time and meta_time.get("content"):
         return _normalize_whitespace(meta_time["content"])
 
-    # Fallback: attempt to parse any visible date-like text
     time_any = soup.select_one("time")
     if time_any:
         raw = _normalize_whitespace(time_any.get_text(" ", strip=True))
@@ -207,6 +180,27 @@ def _extract_published_date_iso(soup: BeautifulSoup) -> Optional[str]:
             return raw
 
     return None
+
+
+def _extract_text_from_article_body(soup: BeautifulSoup) -> str:
+    candidates = [
+        soup.select_one("article"),
+        soup.select_one(".post-content"),
+        soup.select_one(".entry-content"),
+        soup.select_one(".article-content"),
+        soup.select_one("main"),
+    ]
+
+    for c in candidates:
+        if not c:
+            continue
+        ps = c.select("p")
+        text = _normalize_whitespace(" ".join(p.get_text(" ", strip=True) for p in ps))
+        if len(text) >= 50:
+            return text
+
+    ps = soup.select("p")
+    return _normalize_whitespace(" ".join(p.get_text(" ", strip=True) for p in ps))
 
 
 def parse_article(html: str, url: str) -> Article:
@@ -244,7 +238,7 @@ def validate_article(a: Article) -> list[str]:
     return errors
 
 
-def scrape_hespress(
+def scrape_bbc_arabic(
     listing_url: str,
     max_articles: int,
     sleep_seconds: float,
@@ -299,7 +293,7 @@ def write_json(output_path: str, articles: Iterable[Article], meta: dict) -> Non
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Scraper Hespress -> JSON local")
+    p = argparse.ArgumentParser(description="Scraper BBC Arabic -> JSON local")
     p.add_argument(
         "--listing-url",
         default=BASE_URL,
@@ -330,7 +324,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--output",
-        default="hespress_articles.json",
+        default="bbc_arabic_articles.json",
         help="Chemin du fichier JSON de sortie.",
     )
     return p
@@ -339,7 +333,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
     args = build_arg_parser().parse_args(argv)
 
-    articles, meta = scrape_hespress(
+    articles, meta = scrape_bbc_arabic(
         listing_url=args.listing_url,
         max_articles=args.max_articles,
         sleep_seconds=args.sleep_seconds,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# 2026-05-09: DAG updated to run 7 scrapers + 7 bronze writes in parallel, then a single bronze_to_silver over bronze/ after all bronze writes complete.
+
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -36,36 +38,50 @@ with DAG(
         python_callable=compute_gold_prefix,
     )
 
-    scrape_hespress = BashOperator(
-        task_id="scrape_hespress",
-        bash_command=(
-            "python /app/scrapers/hespress_scraper.py "
-            "--max-articles 20 "
-            "--output /tmp/hespress_articles.json"
-        ),
-    )
+    sources = [
+        "hespress",
+        "akhbarona",
+        "goud",
+        "barlamane",
+        "aljazeera",
+        "bbc_arabic",
+        "reuters",
+    ]
 
-    bronze_write = BashOperator(
-        task_id="bronze_write",
-        bash_command=(
-            "python /app/datalake/lake_writer.py "
-            "--input-json /tmp/hespress_articles.json "
-            "--source hespress "
-            "--split-per-article"
-        ),
-        env={
-            "MINIO_ENDPOINT": "http://minio:9000",
-            "MINIO_ACCESS_KEY": "minioadmin",
-            "MINIO_SECRET_KEY": "minioadmin",
-            "DATALAKE_BUCKET": "media-datalake",
-        },
-    )
+    scrape_tasks: dict[str, BashOperator] = {}
+    bronze_write_tasks: dict[str, BashOperator] = {}
+
+    for source in sources:
+        scrape_tasks[source] = BashOperator(
+            task_id=f"scrape_{source}",
+            bash_command=(
+                f"python /app/scrapers/{source}_scraper.py "
+                "--max-articles 20 "
+                f"--output /tmp/{source}_articles.json"
+            ),
+        )
+
+        bronze_write_tasks[source] = BashOperator(
+            task_id=f"bronze_write_{source}",
+            bash_command=(
+                "python /app/datalake/lake_writer.py "
+                f"--input-json /tmp/{source}_articles.json "
+                f"--source {source} "
+                "--split-per-article"
+            ),
+            env={
+                "MINIO_ENDPOINT": "http://minio:9000",
+                "MINIO_ACCESS_KEY": "minioadmin",
+                "MINIO_SECRET_KEY": "minioadmin",
+                "DATALAKE_BUCKET": "media-datalake",
+            },
+        )
 
     bronze_to_silver = BashOperator(
         task_id="bronze_to_silver",
         bash_command=(
             "python /app/etl/bronze_to_silver.py "
-            "--bronze-prefix bronze/source=hespress/ "
+            "--bronze-prefix bronze/ "
             "--default-source hespress"
         ),
         env={
@@ -80,7 +96,7 @@ with DAG(
         task_id="silver_to_gold",
         bash_command=(
             "python /app/etl/silver_to_gold.py "
-            "--silver-prefix silver/source=hespress/ "
+            "--silver-prefix silver/ "
             "--top-n 50 "
             "--gold-prefix \"{{ ti.xcom_pull(task_ids='compute_gold_prefix', key='gold_prefix') }}\""
         ),
@@ -107,4 +123,8 @@ with DAG(
         },
     )
 
-    gold_prefix >> scrape_hespress >> bronze_write >> bronze_to_silver >> silver_to_gold >> load_gold_to_postgres
+    for source in sources:
+        gold_prefix >> scrape_tasks[source] >> bronze_write_tasks[source]
+        bronze_write_tasks[source] >> bronze_to_silver
+
+    bronze_to_silver >> silver_to_gold >> load_gold_to_postgres

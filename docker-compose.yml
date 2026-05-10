@@ -112,7 +112,8 @@ services:
       SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://media:media@postgres:5432/media
     volumes:
       - superset_home:/app/superset_home
-    command: ["/bin/bash", "-c", "superset db upgrade && superset init && superset run -h 0.0.0.0 -p 8088"]
+      - ./superset:/app/superset
+    command: ["/bin/bash", "-c", "superset db upgrade && superset init && bash /app/superset/init.sh && superset run -h 0.0.0.0 -p 8088"]
 
   scraper:
     build:
@@ -135,6 +136,27 @@ services:
       - ./etl:/app/etl
       - ./warehouse:/app/warehouse
     command: ["python", "-c", "print('scraper container ready')"]
+
+  kafka-consumer:
+    build:
+      context: .
+      dockerfile: docker/scraper/Dockerfile
+    depends_on:
+      - kafka
+      - minio
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      DATALAKE_BUCKET: media-datalake
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: media.articles
+    volumes:
+      - ./ingestion:/app/ingestion
+      - ./datalake:/app/datalake
+      - ./etl:/app/etl
+      - ./warehouse:/app/warehouse
+    command: ["python", "/app/ingestion/kafka_consumer.py"]
 
 volumes:
   minio_data:

@@ -1,4 +1,6 @@
 import argparse
+
+# 2026-05-09: Added propagation of optional 'auteur' field from Bronze to Silver in normalize_article().
 import hashlib
 import json
 import os
@@ -138,6 +140,8 @@ def normalize_article(raw: dict[str, Any], default_source: str) -> dict[str, Any
     url = str(raw.get("url", "")).strip()
     date_publication = raw.get("date_publication")
     categorie = _clean_text(raw.get("categorie")) if raw.get("categorie") is not None else None
+    auteur = _clean_text(raw.get("auteur")) if raw.get("auteur") is not None else None
+    auteur = auteur if auteur else None
     contenu = _clean_text(raw.get("contenu", ""))
     source = _clean_text(raw.get("source", "")) or default_source
 
@@ -148,6 +152,7 @@ def normalize_article(raw: dict[str, Any], default_source: str) -> dict[str, Any
         "url": url,
         "date_publication": date_publication,
         "categorie": categorie,
+        "auteur": auteur,
         "contenu": contenu,
         "source": source,
         "langue": langue,
