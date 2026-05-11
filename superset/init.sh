@@ -3,9 +3,9 @@
 set -euo pipefail
 
 POSTGRES_URI="postgresql+psycopg2://media:media@postgres:5432/media"
-DASH_DIR="/app/superset/dashboards"
+DASH_DIR="/app/docker-init/dashboards"
 
-superset shell -c "
+superset shell <<EOF
 from superset import db
 from superset.models.core import Database
 
@@ -26,7 +26,8 @@ except Exception:
 
 db.session.commit()
 print('OK - database upserted:', name)
-" || true
+EOF
+
 
 if [ -d "${DASH_DIR}" ]; then
   for f in "${DASH_DIR}"/*.json; do

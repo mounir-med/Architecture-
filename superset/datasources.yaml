@@ -1,0 +1,16 @@
+databases:
+- database_name: media-postgres
+  sqlalchemy_uri: postgresql+psycopg2://media:media@postgres:5432/media
+  tables:
+  - table_name: articles_par_source
+    schema: public
+  - table_name: articles_par_jour
+    schema: public
+  - table_name: mots_cles
+    schema: public
+  - table_name: top_sujets
+    schema: public
+  - table_name: articles_par_theme
+    schema: public
+  - table_name: articles_par_pays
+    schema: public

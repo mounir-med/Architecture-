@@ -47,7 +47,7 @@ services:
       POSTGRES_USER: media
       POSTGRES_PASSWORD: media
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./warehouse/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
@@ -108,12 +108,13 @@ services:
     environment:
       SUPERSET_SECRET_KEY: "change_me"
       SUPERSET_LOAD_EXAMPLES: "no"
-      SUPERSET_ENV: production
       SQLALCHEMY_DATABASE_URI: postgresql+psycopg2://media:media@postgres:5432/media
+      FLASK_ENV: production
     volumes:
       - superset_home:/app/superset_home
-      - ./superset:/app/superset
-    command: ["/bin/bash", "-c", "superset db upgrade && superset init && bash /app/superset/init.sh && superset run -h 0.0.0.0 -p 8088"]
+      - ./superset:/app/docker-init
+    command: ["/bin/bash", "-c", "superset db upgrade && superset fab create-admin --username admin --firstname Admin --lastname User --email admin@example.com --password admin || true && superset init && bash /app/docker-init/init.sh && superset run -h 0.0.0.0 -p 8088"]
+    restart: always
 
   scraper:
     build:
@@ -157,6 +158,7 @@ services:
       - ./etl:/app/etl
       - ./warehouse:/app/warehouse
     command: ["python", "/app/ingestion/kafka_consumer.py"]
+    restart: always
 
 volumes:
   minio_data:

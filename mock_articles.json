@@ -1,0 +1,26 @@
+{
+  "meta": {
+    "source": "hespress",
+    "scraped_at": "2026-05-11T16:18:25Z"
+  },
+  "articles": [
+    {
+      "titre": "Test Article 1",
+      "url": "https://www.hespress.com/test-123456.html",
+      "date_publication": "2026-05-11T10:00:00Z",
+      "categorie": "Politique",
+      "auteur": "Antigravity",
+      "contenu": "Ceci est un article de test pour vérifier le workflow du projet Architecture. Le contenu est suffisamment long pour passer la validation.",
+      "source": "hespress"
+    },
+    {
+      "titre": "Test Article 2",
+      "url": "https://www.hespress.com/test-789012.html",
+      "date_publication": "2026-05-11T11:00:00Z",
+      "categorie": "Sport",
+      "auteur": "Antigravity",
+      "contenu": "Un autre article de test pour s'assurer que le traitement par lot fonctionne correctement dans le pipeline Airflow.",
+      "source": "hespress"
+    }
+  ]
+}
