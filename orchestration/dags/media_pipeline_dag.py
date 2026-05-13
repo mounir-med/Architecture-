@@ -45,7 +45,6 @@ with DAG(
         "barlamane",
         "aljazeera",
         "bbc_arabic",
-        "reuters",
     ]
 
     scrape_tasks: dict[str, BashOperator] = {}
