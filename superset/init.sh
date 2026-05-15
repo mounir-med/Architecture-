@@ -5,34 +5,18 @@ set -euo pipefail
 POSTGRES_URI="postgresql+psycopg2://media:media@postgres:5432/media"
 DASH_DIR="/app/docker-init/dashboards"
 
-superset shell <<EOF
-from superset import db
-from superset.models.core import Database
+# Import datasets (Legacy YAML)
+if [ -f "/app/docker-init/datasources.yaml" ]; then
+  echo "Importing legacy datasources..."
+  superset legacy-import-datasources -p /app/docker-init/datasources.yaml || true
+fi
 
-uri = '${POSTGRES_URI}'
-name = 'media-postgres'
-
-db_obj = db.session.query(Database).filter(Database.database_name == name).one_or_none()
-if db_obj is None:
-    db_obj = Database(database_name=name)
-    db.session.add(db_obj)
-
-db_obj.sqlalchemy_uri = uri
-# allow DDL/queries
-try:
-    db_obj.allow_run_async = True
-except Exception:
-    pass
-
-db.session.commit()
-print('OK - database upserted:', name)
-EOF
-
-
+# Import dashboards (Legacy JSON)
 if [ -d "${DASH_DIR}" ]; then
   for f in "${DASH_DIR}"/*.json; do
     if [ -f "$f" ]; then
-      superset import_dashboards -p "$f" --username admin || true
+      echo "Importing legacy dashboard: $f"
+      superset legacy-import-dashboards -p "$f" -u admin || true
     fi
   done
 fi
